@@ -88,7 +88,55 @@ def user_log_num_count2(df):
     df = df.groupby("msno")["log_count"].sum().reset_index()
     return df
 
-def square(a): return a ** 2
+def sklearn_kernel(parallel_data):
+    """
+    sklearn_kernel.
+    """
+    import gc
+
+    clf = parallel_data['clf']
+    predict_method = parallel_data['predict_method']
+    round_i = parallel_data['round_i']
+    test_index = parallel_data['test_index']
+    train_data_x = parallel_data['train_data_x']
+    train_data_y = parallel_data['train_data_y']
+    training_test_data_x = parallel_data['training_test_data_x']
+    training_test_data_y = parallel_data['training_test_data_y']
+    test_x = parallel_data['test_x']
+    training_prediction = parallel_data['training_prediction']
+    test_prediction = parallel_data['test_prediction']
+
+    if 'parallel_data_name' in parallel_data:
+        parallel_data_name = parallel_data['parallel_data_name']
+        globalDict = globals()
+        print(globalDict)
+        print(parallel_data_name in globalDict)
+        if parallel_data_name in globalDict:
+            del globalDict[parallel_data_name]
+            gc.collect()
+            print("all local variables are invisible now.")
+    clf.fit(train_data_x, train_data_y)
+    del train_data_x
+    del train_data_y
+    gc.collect()
+    print("round%d training finished." % round_i)
+
+    if predict_method == "proba":
+        training_prediction[test_index] = clf.predict_proba(training_test_data_x)
+        test_prediction[round_i, :] = clf.predict_proba(test_x)
+    elif predict_method == "log_proba":
+        training_prediction[test_index] = clf.predict_log_proba(training_test_data_x)
+        test_prediction[round_i, :] = clf.predict_log_proba(test_x)
+    else:
+        training_prediction[test_index] = clf.predict(training_test_data_x).reshape(-1, 1)
+        test_prediction[round_i, :] = clf.predict(test_x).reshape(-1, 1)    
+
+    del training_test_data_x
+    del training_test_data_y
+    del test_index
+    gc.collect()
+
+def square(a): return a ** 3
 
 if __name__ == "__main__":
 	from multiprocessing import Pool, cpu_count
