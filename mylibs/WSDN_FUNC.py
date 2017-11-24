@@ -103,38 +103,20 @@ def sklearn_kernel(parallel_data):
     training_test_data_x = parallel_data['training_test_data_x']
     training_test_data_y = parallel_data['training_test_data_y']
     test_x = parallel_data['test_x']
-    training_prediction = parallel_data['training_prediction']
-    test_prediction = parallel_data['test_prediction']
-
-    if 'parallel_data_name' in parallel_data:
-        parallel_data_name = parallel_data['parallel_data_name']
-        globalDict = globals()
-        print(globalDict)
-        print(parallel_data_name in globalDict)
-        if parallel_data_name in globalDict:
-            del globalDict[parallel_data_name]
-            gc.collect()
-            print("all local variables are invisible now.")
     clf.fit(train_data_x, train_data_y)
-    del train_data_x
-    del train_data_y
-    gc.collect()
-    print("round%d training finished." % round_i)
-
     if predict_method == "proba":
-        training_prediction[test_index] = clf.predict_proba(training_test_data_x)
-        test_prediction[round_i, :] = clf.predict_proba(test_x)
+        training_prediction = clf.predict_proba(training_test_data_x)
+        test_prediction = clf.predict_proba(test_x)
     elif predict_method == "log_proba":
-        training_prediction[test_index] = clf.predict_log_proba(training_test_data_x)
-        test_prediction[round_i, :] = clf.predict_log_proba(test_x)
+        training_prediction = clf.predict_log_proba(training_test_data_x)
+        test_prediction = clf.predict_log_proba(test_x)
     else:
-        training_prediction[test_index] = clf.predict(training_test_data_x).reshape(-1, 1)
-        test_prediction[round_i, :] = clf.predict(test_x).reshape(-1, 1)    
+        training_prediction = clf.predict(training_test_data_x).reshape(-1, 1)
+        test_prediction = clf.predict(test_x).reshape(-1, 1)    
+    return training_prediction, test_prediction, round_i, test_index
 
-    del training_test_data_x
-    del training_test_data_y
-    del test_index
-    gc.collect()
+def poolAsignTest(m):
+    print("a" in globals())
 
 def square(a): return a ** 3
 
