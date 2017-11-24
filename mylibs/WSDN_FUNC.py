@@ -92,8 +92,6 @@ def sklearn_kernel(parallel_data):
     """
     sklearn_kernel.
     """
-    import gc
-
     clf = parallel_data['clf']
     predict_method = parallel_data['predict_method']
     round_i = parallel_data['round_i']
