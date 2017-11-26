@@ -16,11 +16,10 @@ def transform_df2(df):
 
 def user_log_count(df):
     """
-        user log count
+        user log count.
     """
-    df["date"] = pd.to_datetime(df["date"], format='%Y%m%d')
     df = df.sort_values(by=['date'], ascending=[True])
-    df = df.set_index("date").truncate(before = '2017-01-01').reset_index()
+    df = df.set_index("date").truncate(before = '2017-02-01').reset_index()
     num_cols = [col for col in df.columns if col not in ["msno", "date"]]
     df_group = df.groupby("msno")
     df_group_sum = df_group[num_cols].sum().reset_index()
@@ -44,6 +43,27 @@ def user_log_count2(df):
     df_group_concat = pd.concat([df_group_sum, df_group_mean], axis=1)
 
     return df_group_concat
+
+def user_log_sum(df):
+    """
+        user_log_sum.
+    """
+    df = df.sort_values(by=['date'], ascending=[True])
+    df = df.set_index("date").truncate(before = '2017-03-01').reset_index()
+    num_cols = [col for col in df.columns if col not in ["msno", "date"]]
+    df_group = df.groupby("msno")
+    df_group_sum = df_group[num_cols].sum().reset_index()
+    cols_map = dict([[col, col+"_sum_1m"] for col in df_group_sum.columns if col != "msno"])
+    df_group_sum = df_group_sum.rename(columns=cols_map)
+
+    return df_group_sum
+
+def user_log_sum2(df):
+    sum_cols = [col for col in df.columns if col.endswith("_sum_1m")]
+    df_group = df.groupby("msno")
+    df_group_sum = df_group[sum_cols].sum().reset_index()
+
+    return df_group_sum
 
 def user_log_trend(df):
     """
@@ -78,14 +98,14 @@ def user_log_trend2(df):
     return df_trend
 
 def user_log_num_count(df):
-    df["date"] = pd.to_datetime(df["date"], format='%Y%m%d')
+    # df["date"] = pd.to_datetime(df["date"], format='%Y%m%d')
     df = df.sort_values(by=['date'], ascending=[True])
-    df = df.set_index("date").truncate(before = '2017-02-01').reset_index()
-    df = df["msno"].value_counts().reset_index().rename(columns={"index":"msno", "msno":"log_count"})
+    df = df.set_index("date").truncate(before = '2017-03-01').reset_index()
+    df = df["msno"].value_counts().reset_index().rename(columns={"index":"msno", "msno":"log_count_1m"})
     return df
 
 def user_log_num_count2(df):
-    df = df.groupby("msno")["log_count"].sum().reset_index()
+    df = df.groupby("msno")["log_count_1m"].sum().reset_index()
     return df
 
 def sklearn_kernel(parallel_data):
@@ -111,7 +131,7 @@ def sklearn_kernel(parallel_data):
     else:
         training_prediction = clf.predict(training_test_data_x).reshape(-1, 1)
         test_prediction = clf.predict(test_x).reshape(-1, 1)    
-    return training_prediction, test_prediction, round_i, test_index
+    return training_prediction, test_prediction, round_i, test_index, clf.classes_, #clf
 
 def poolAsignTest(m):
     print("a" in globals())
