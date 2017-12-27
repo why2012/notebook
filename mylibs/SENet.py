@@ -49,12 +49,14 @@ class Scale(Layer):
         bias_initializer = 'zeros',
         pooling = "avg",
         activation = "sigmoid",
+        data_format = "channels_last", # channels_first
         kernel_regularizer = None, 
         bias_regularizer = None, 
         kernel_constraint = None, 
         bias_constraint = None, 
         **kwargs):
-        super(MyLayer, self).__init__(**kwargs)
+        super(Scale, self).__init__(**kwargs)
+        self.data_format = data_format
         self.pooling = pooling
         self.activation = activations.get(activation)
         self.kernel_initializer = initializers.get(kernel_initializer)
@@ -66,11 +68,11 @@ class Scale(Layer):
 
     def build(self, input_shape):
         # Create a trainable weight variable for this layer.
-        self.input_shape = input_shape
+        self._input_shape = input_shape
         if self.data_format == 'channels_last':
-            channel_units = self.input_shape[3]
+            channel_units = self._input_shape[3]
         else:
-            channel_units = self.input_shape[1]
+            channel_units = self._input_shape[1]
         input_dim = channel_units
         fc_1_units = int(channel_units / 16)
         fc_2_units = channel_units
@@ -94,7 +96,7 @@ class Scale(Layer):
                                     initializer=self.bias_initializer ,
                                     regularizer=self.bias_regularizer,
                                     constraint=self.bias_constraint)
-        super(MyLayer, self).build(self.input_shape)  # Be sure to call this somewhere!
+        super(Scale, self).build(self._input_shape)  # Be sure to call this somewhere!
 
     def call(self, inputs):
         # global pooling
@@ -106,12 +108,12 @@ class Scale(Layer):
             pool = K.max
         if self.data_format == 'channels_last':
             output = pool(inputs, axis=[1, 2])
-            reshape_size = (1, 1, 1, self.input_shape[3])
+            reshape_size = (-1, 1, 1, self._input_shape[3])
         else:
             output = pool(inputs, axis=[2, 3])
-            reshape_size = (1, self.input_shape[3], 1, 1)
+            reshape_size = (-1, self._input_shape[3], 1, 1)
         # fc layers
-        output = K.dot(inputs, self.kernel_1)
+        output = K.dot(output, self.kernel_1)
         output = K.bias_add(output, self.bias_1)
         output = K.dot(output, self.kernel_2)
         output = K.bias_add(output, self.bias_2)
@@ -124,7 +126,7 @@ class Scale(Layer):
         return input_shape
 
 
-def identity_block(input_tensor, kernel_size, filters, stage, block, last_act_layer_name = None):
+def identity_block(input_tensor, kernel_size, filters, stage, block, last_act_layer_name = None, kernel_regularizer = None, bias_regularizer = None, activity_regularizer = None):
     """The identity block is the block that has no conv layer at shortcut.
 
     # Arguments
@@ -145,21 +147,23 @@ def identity_block(input_tensor, kernel_size, filters, stage, block, last_act_la
     conv_name_base = 'res' + str(stage) + block + '_branch'
     bn_name_base = 'bn' + str(stage) + block + '_branch'
 
-    x = Conv2D(filters1, (1, 1), name=conv_name_base + '2a')(input_tensor)
+    regularizer = dict(kernel_regularizer = kernel_regularizer, bias_regularizer = bias_regularizer, activity_regularizer = activity_regularizer)
+
+    x = Conv2D(filters1, (1, 1), name=conv_name_base + '2a', **regularizer)(input_tensor)
     x = BatchNormalization(axis=bn_axis, name=bn_name_base + '2a')(x)
     x = Activation('relu')(x)
 
     x = Conv2D(filters2, kernel_size,
-               padding='same', name=conv_name_base + '2b')(x)
+               padding='same', name=conv_name_base + '2b', **regularizer)(x)
     x = BatchNormalization(axis=bn_axis, name=bn_name_base + '2b')(x)
     x = Activation('relu')(x)
 
-    x = Conv2D(filters3, (1, 1), name=conv_name_base + '2c')(x)
+    x = Conv2D(filters3, (1, 1), name=conv_name_base + '2c', **regularizer)(x)
     x = BatchNormalization(axis=bn_axis, name=bn_name_base + '2c')(x)
 
-    input_tensor_scale = Scale()(input_tensor)
+    x_scale = Scale()(x)
 
-    x = layers.add([x, input_tensor_scale])
+    x = layers.add([x_scale, input_tensor])
     if last_act_layer_name is not None:
         x = Activation('relu', name = last_act_layer_name)(x)
     else:
@@ -167,7 +171,7 @@ def identity_block(input_tensor, kernel_size, filters, stage, block, last_act_la
     return x
 
 
-def conv_block(input_tensor, kernel_size, filters, stage, block, strides=(2, 2)):
+def conv_block(input_tensor, kernel_size, filters, stage, block, strides=(2, 2), kernel_regularizer = None, bias_regularizer = None, activity_regularizer = None):
     """A block that has a conv layer at shortcut.
 
     # Arguments
@@ -191,26 +195,28 @@ def conv_block(input_tensor, kernel_size, filters, stage, block, strides=(2, 2))
     conv_name_base = 'res' + str(stage) + block + '_branch'
     bn_name_base = 'bn' + str(stage) + block + '_branch'
 
+    regularizer = dict(kernel_regularizer = kernel_regularizer, bias_regularizer = bias_regularizer, activity_regularizer = activity_regularizer)
+
     x = Conv2D(filters1, (1, 1), strides=strides,
-               name=conv_name_base + '2a')(input_tensor)
+               name=conv_name_base + '2a', **regularizer)(input_tensor)
     x = BatchNormalization(axis=bn_axis, name=bn_name_base + '2a')(x)
     x = Activation('relu')(x)
 
     x = Conv2D(filters2, kernel_size, padding='same',
-               name=conv_name_base + '2b')(x)
+               name=conv_name_base + '2b', **regularizer)(x)
     x = BatchNormalization(axis=bn_axis, name=bn_name_base + '2b')(x)
     x = Activation('relu')(x)
 
-    x = Conv2D(filters3, (1, 1), name=conv_name_base + '2c')(x)
+    x = Conv2D(filters3, (1, 1), name=conv_name_base + '2c', **regularizer)(x)
     x = BatchNormalization(axis=bn_axis, name=bn_name_base + '2c')(x)
 
-    input_tensor_scale = Scale()(input_tensor)
+    x_scale = Scale()(x)
 
     shortcut = Conv2D(filters3, (1, 1), strides=strides,
-                      name=conv_name_base + '1')(input_tensor_scale)
+                      name=conv_name_base + '1', **regularizer)(input_tensor)
     shortcut = BatchNormalization(axis=bn_axis, name=bn_name_base + '1')(shortcut)
 
-    x = layers.add([x, shortcut])
+    x = layers.add([x_scale, shortcut])
     x = Activation('relu')(x)
     return x
 
@@ -218,7 +224,11 @@ def conv_block(input_tensor, kernel_size, filters, stage, block, strides=(2, 2))
 def SENet50(include_top=True, weights='imagenet',
              input_tensor=None, input_shape=None,
              pooling=None,
-             classes=1000):
+             classes=1000, 
+             kernel_regularizer = None, 
+             bias_regularizer = None, 
+             activity_regularizer = None,
+             regularizer_value = 0.01):
     """Instantiates the ResNet50 architecture.
 
     Optionally loads weights pre-trained
@@ -287,6 +297,19 @@ def SENet50(include_top=True, weights='imagenet',
                                       require_flatten=include_top,
                                       weights=weights)
 
+    kernel_regularizer = regularizers.get(kernel_regularizer)
+    bias_regularizer = regularizers.get(bias_regularizer)
+    activity_regularizer = regularizers.get(activity_regularizer)
+    regularizer_value = K.cast_to_floatx(regularizer_value)
+    for regularizer in (kernel_regularizer, bias_regularizer, activity_regularizer):
+        if regularizer is None:
+            continue
+        if regularizer.l1 != 0:
+            regularizer.l1 = regularizer_value
+        if regularizer.l2 != 0:
+            regularizer.l2 = regularizer_value
+    regularizer = dict(kernel_regularizer = kernel_regularizer, bias_regularizer = bias_regularizer, activity_regularizer = activity_regularizer)
+
     if input_tensor is None:
         img_input = Input(shape=input_shape)
     else:
@@ -300,30 +323,30 @@ def SENet50(include_top=True, weights='imagenet',
         bn_axis = 1
 
     x = Conv2D(
-        64, (7, 7), strides=(2, 2), padding='same', name='conv1')(img_input)
+        64, (7, 7), strides=(2, 2), padding='same', name='conv1', **regularizer)(img_input)
     x = BatchNormalization(axis=bn_axis, name='bn_conv1')(x)
     x = Activation('relu')(x)
     x = MaxPooling2D((3, 3), strides=(2, 2))(x)
 
-    x = conv_block(x, 3, [64, 64, 256], stage=2, block='a', strides=(1, 1))
-    x = identity_block(x, 3, [64, 64, 256], stage=2, block='b')
-    x = identity_block(x, 3, [64, 64, 256], stage=2, block='c')
+    x = conv_block(x, 3, [64, 64, 256], stage=2, block='a', strides=(1, 1), **regularizer)
+    x = identity_block(x, 3, [64, 64, 256], stage=2, block='b', **regularizer)
+    x = identity_block(x, 3, [64, 64, 256], stage=2, block='c', **regularizer)
 
-    x = conv_block(x, 3, [128, 128, 512], stage=3, block='a')
-    x = identity_block(x, 3, [128, 128, 512], stage=3, block='b')
-    x = identity_block(x, 3, [128, 128, 512], stage=3, block='c')
-    x = identity_block(x, 3, [128, 128, 512], stage=3, block='d')
+    x = conv_block(x, 3, [128, 128, 512], stage=3, block='a', **regularizer)
+    x = identity_block(x, 3, [128, 128, 512], stage=3, block='b', **regularizer)
+    x = identity_block(x, 3, [128, 128, 512], stage=3, block='c', **regularizer)
+    x = identity_block(x, 3, [128, 128, 512], stage=3, block='d', **regularizer)
 
-    x = conv_block(x, 3, [256, 256, 1024], stage=4, block='a')
-    x = identity_block(x, 3, [256, 256, 1024], stage=4, block='b')
-    x = identity_block(x, 3, [256, 256, 1024], stage=4, block='c')
-    x = identity_block(x, 3, [256, 256, 1024], stage=4, block='d')
-    x = identity_block(x, 3, [256, 256, 1024], stage=4, block='e')
-    x = identity_block(x, 3, [256, 256, 1024], stage=4, block='f', last_act_layer_name = "final")
+    x = conv_block(x, 3, [256, 256, 1024], stage=4, block='a', **regularizer)
+    x = identity_block(x, 3, [256, 256, 1024], stage=4, block='b', **regularizer)
+    x = identity_block(x, 3, [256, 256, 1024], stage=4, block='c', **regularizer)
+    x = identity_block(x, 3, [256, 256, 1024], stage=4, block='d', **regularizer)
+    x = identity_block(x, 3, [256, 256, 1024], stage=4, block='e', **regularizer)
+    x = identity_block(x, 3, [256, 256, 1024], stage=4, block='f', **regularizer, last_act_layer_name = "final")
 
-    x = conv_block(x, 3, [512, 512, 2048], stage=5, block='a')
-    x = identity_block(x, 3, [512, 512, 2048], stage=5, block='b')
-    x = identity_block(x, 3, [512, 512, 2048], stage=5, block='c')
+    x = conv_block(x, 3, [512, 512, 2048], stage=5, block='a', **regularizer)
+    x = identity_block(x, 3, [512, 512, 2048], stage=5, block='b', **regularizer)
+    x = identity_block(x, 3, [512, 512, 2048], stage=5, block='c', **regularizer)
 
     # modified here, 7 -> 3
     x = AveragePooling2D((3, 3), name='avg_pool')(x)
@@ -358,7 +381,7 @@ def SENet50(include_top=True, weights='imagenet',
                                     WEIGHTS_PATH_NO_TOP,
                                     cache_subdir='models',
                                     md5_hash='a268eb855778b3df3c7506639542a6af')
-        model.load_weights(weights_path)
+        model.load_weights(weights_path, by_name=True)
         if K.backend() == 'theano':
             layer_utils.convert_all_kernels_in_model(model)
             if include_top:
@@ -377,6 +400,6 @@ def SENet50(include_top=True, weights='imagenet',
                           'your Keras config '
                           'at ~/.keras/keras.json.')
     elif weights is not None:
-        model.load_weights(weights)
+        model.load_weights(weights, by_name=True)
 
     return model
