@@ -32,10 +32,96 @@ from keras.utils.data_utils import get_file
 from keras.applications.imagenet_utils import decode_predictions
 from keras.applications.imagenet_utils import preprocess_input
 from keras.applications.imagenet_utils import _obtain_input_shape
+from keras.engine import Layer
+from keras import activations
+from keras import initializers
+from keras import regularizers
+from keras import constraints
 
 
 WEIGHTS_PATH = 'https://github.com/fchollet/deep-learning-models/releases/download/v0.2/resnet50_weights_tf_dim_ordering_tf_kernels.h5'
 WEIGHTS_PATH_NO_TOP = 'https://github.com/fchollet/deep-learning-models/releases/download/v0.2/resnet50_weights_tf_dim_ordering_tf_kernels_notop.h5'
+
+class Scale(Layer):
+
+    def __init__(self, 
+        kernel_initializer = 'glorot_uniform',
+        bias_initializer = 'zeros',
+        pooling = "avg",
+        activation = "sigmoid",
+        kernel_regularizer = None, 
+        bias_regularizer = None, 
+        kernel_constraint = None, 
+        bias_constraint = None, 
+        **kwargs):
+        super(MyLayer, self).__init__(**kwargs)
+        self.pooling = pooling
+        self.activation = activations.get(activation)
+        self.kernel_initializer = initializers.get(kernel_initializer)
+        self.bias_initializer = initializers.get(bias_initializer)
+        self.kernel_regularizer = regularizers.get(kernel_regularizer)
+        self.bias_regularizer = regularizers.get(bias_regularizer)
+        self.kernel_constraint = constraints.get(kernel_constraint)
+        self.bias_constraint = constraints.get(bias_constraint)
+
+    def build(self, input_shape):
+        # Create a trainable weight variable for this layer.
+        self.input_shape = input_shape
+        if self.data_format == 'channels_last':
+            channel_units = self.input_shape[3]
+        else:
+            channel_units = self.input_shape[1]
+        input_dim = channel_units
+        fc_1_units = int(channel_units / 16)
+        fc_2_units = channel_units
+        self.kernel_1 = self.add_weight(name='scale_fc_1', 
+                                    shape=(input_dim, fc_1_units),
+                                    initializer=self.kernel_initializer,
+                                    regularizer=self.kernel_regularizer,
+                                    constraint=self.kernel_constraint)
+        self.bias_1 = self.add_weight(name='scale_fc_1_bias', 
+                                    shape=(fc_1_units,),
+                                    initializer=self.bias_initializer ,
+                                    regularizer=self.bias_regularizer,
+                                    constraint=self.bias_constraint)
+        self.kernel_2 = self.add_weight(name='scale_fc_2', 
+                                    shape=(fc_1_units, fc_2_units),
+                                      initializer=self.kernel_initializer,
+                                      regularizer=self.kernel_regularizer,
+                                      constraint=self.kernel_constraint)
+        self.bias_2 = self.add_weight(name='scale_fc_2_bias',
+                                    shape=(fc_2_units,),
+                                    initializer=self.bias_initializer ,
+                                    regularizer=self.bias_regularizer,
+                                    constraint=self.bias_constraint)
+        super(MyLayer, self).build(self.input_shape)  # Be sure to call this somewhere!
+
+    def call(self, inputs):
+        # global pooling
+        if self.pooling == "max":
+            pool = K.max
+        elif self.pooling == "avg":
+            pool = K.mean
+        else:
+            pool = K.max
+        if self.data_format == 'channels_last':
+            output = pool(inputs, axis=[1, 2])
+            reshape_size = (1, 1, 1, self.input_shape[3])
+        else:
+            output = pool(inputs, axis=[2, 3])
+            reshape_size = (1, self.input_shape[3], 1, 1)
+        # fc layers
+        output = K.dot(inputs, self.kernel_1)
+        output = K.bias_add(output, self.bias_1)
+        output = K.dot(output, self.kernel_2)
+        output = K.bias_add(output, self.bias_2)
+        output = self.activation(output)
+        output = K.reshape(output, reshape_size)
+        output = output * inputs
+        return output
+
+    def compute_output_shape(self, input_shape):
+        return input_shape
 
 
 def identity_block(input_tensor, kernel_size, filters, stage, block, last_act_layer_name = None):
@@ -71,7 +157,9 @@ def identity_block(input_tensor, kernel_size, filters, stage, block, last_act_la
     x = Conv2D(filters3, (1, 1), name=conv_name_base + '2c')(x)
     x = BatchNormalization(axis=bn_axis, name=bn_name_base + '2c')(x)
 
-    x = layers.add([x, input_tensor])
+    input_tensor_scale = Scale()(input_tensor)
+
+    x = layers.add([x, input_tensor_scale])
     if last_act_layer_name is not None:
         x = Activation('relu', name = last_act_layer_name)(x)
     else:
@@ -116,8 +204,10 @@ def conv_block(input_tensor, kernel_size, filters, stage, block, strides=(2, 2))
     x = Conv2D(filters3, (1, 1), name=conv_name_base + '2c')(x)
     x = BatchNormalization(axis=bn_axis, name=bn_name_base + '2c')(x)
 
+    input_tensor_scale = Scale()(input_tensor)
+
     shortcut = Conv2D(filters3, (1, 1), strides=strides,
-                      name=conv_name_base + '1')(input_tensor)
+                      name=conv_name_base + '1')(input_tensor_scale)
     shortcut = BatchNormalization(axis=bn_axis, name=bn_name_base + '1')(shortcut)
 
     x = layers.add([x, shortcut])
@@ -125,7 +215,7 @@ def conv_block(input_tensor, kernel_size, filters, stage, block, strides=(2, 2))
     return x
 
 
-def ResNet50(include_top=True, weights='imagenet',
+def SENet50(include_top=True, weights='imagenet',
              input_tensor=None, input_shape=None,
              pooling=None,
              classes=1000):
