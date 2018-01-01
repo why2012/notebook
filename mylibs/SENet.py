@@ -171,7 +171,7 @@ def identity_block(input_tensor, kernel_size, filters, stage, block, last_act_la
     return x
 
 
-def conv_block(input_tensor, kernel_size, filters, stage, block, strides=(2, 2), kernel_regularizer = None, bias_regularizer = None, activity_regularizer = None):
+def conv_block(input_tensor, kernel_size, filters, stage, block, strides=(2, 2), last_act_layer_name = None, kernel_regularizer = None, bias_regularizer = None, activity_regularizer = None):
     """A block that has a conv layer at shortcut.
 
     # Arguments
@@ -217,7 +217,10 @@ def conv_block(input_tensor, kernel_size, filters, stage, block, strides=(2, 2),
     shortcut = BatchNormalization(axis=bn_axis, name=bn_name_base + '1')(shortcut)
 
     x = layers.add([x_scale, shortcut])
-    x = Activation('relu')(x)
+    if last_act_layer_name is not None:
+        x = Activation('relu', name = last_act_layer_name)(x)
+    else:
+        x = Activation('relu')(x)
     return x
 
 
@@ -332,7 +335,7 @@ def SENet50(include_top=True, weights='imagenet',
     x = identity_block(x, 3, [64, 64, 256], stage=2, block='b', **regularizer)
     x = identity_block(x, 3, [64, 64, 256], stage=2, block='c', **regularizer)
 
-    x = conv_block(x, 3, [128, 128, 512], stage=3, block='a', **regularizer)
+    x = conv_block(x, 3, [128, 128, 512], stage=3, block='a', **regularizer, last_act_layer_name = "final")
     x = identity_block(x, 3, [128, 128, 512], stage=3, block='b', **regularizer)
     x = identity_block(x, 3, [128, 128, 512], stage=3, block='c', **regularizer)
     x = identity_block(x, 3, [128, 128, 512], stage=3, block='d', **regularizer)
@@ -342,7 +345,7 @@ def SENet50(include_top=True, weights='imagenet',
     x = identity_block(x, 3, [256, 256, 1024], stage=4, block='c', **regularizer)
     x = identity_block(x, 3, [256, 256, 1024], stage=4, block='d', **regularizer)
     x = identity_block(x, 3, [256, 256, 1024], stage=4, block='e', **regularizer)
-    x = identity_block(x, 3, [256, 256, 1024], stage=4, block='f', **regularizer, last_act_layer_name = "final")
+    x = identity_block(x, 3, [256, 256, 1024], stage=4, block='f', **regularizer)
 
     x = conv_block(x, 3, [512, 512, 2048], stage=5, block='a', **regularizer)
     x = identity_block(x, 3, [512, 512, 2048], stage=5, block='b', **regularizer)
