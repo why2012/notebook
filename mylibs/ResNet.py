@@ -14,6 +14,7 @@ import os
 import warnings
 
 from keras.layers import Input
+from keras.layers import Dropout
 from keras import layers
 from keras.layers import Dense
 from keras.layers import Activation
@@ -78,6 +79,30 @@ def identity_block(input_tensor, kernel_size, filters, stage, block, last_act_la
         x = Activation('relu')(x)
     return x
 
+def identity_bulding_block34(input_tensor, kernel_size, filters, stage, block, last_act_layer_name = None):
+    filters1, filters2 = filters
+    if K.image_data_format() == 'channels_last':
+        bn_axis = 3
+    else:
+        bn_axis = 1
+    conv_name_base = 'res' + str(stage) + block + '_branch'
+    bn_name_base = 'bn' + str(stage) + block + '_branch'
+
+    x = Conv2D(filters1, kernel_size, padding='same', name=conv_name_base + '2a')(input_tensor)
+    x = BatchNormalization(axis=bn_axis, name=bn_name_base + '2a')(x)
+    x = Activation('relu')(x)
+
+    x = Conv2D(filters2, kernel_size, padding='same', name=conv_name_base + '2b')(x)
+    x = BatchNormalization(axis=bn_axis, name=bn_name_base + '2b')(x)
+    x = Activation('relu')(x)
+
+    x = layers.add([x, input_tensor])
+    if last_act_layer_name is not None:
+        x = Activation('relu', name = last_act_layer_name)(x)
+    else:
+        x = Activation('relu')(x)
+    return x
+
 
 def conv_block(input_tensor, kernel_size, filters, stage, block, strides=(2, 2)):
     """A block that has a conv layer at shortcut.
@@ -124,6 +149,99 @@ def conv_block(input_tensor, kernel_size, filters, stage, block, strides=(2, 2))
     x = Activation('relu')(x)
     return x
 
+def conv_bulding_block34(input_tensor, kernel_size, filters, stage, block, strides=(2, 2)):
+    filters1, filters2 = filters
+    if K.image_data_format() == 'channels_last':
+        bn_axis = 3
+    else:
+        bn_axis = 1
+    conv_name_base = 'res' + str(stage) + block + '_branch'
+    bn_name_base = 'bn' + str(stage) + block + '_branch'
+
+    if strides == (1, 1):
+        x = Conv2D(filters1, kernel_size, strides=strides, padding='same', name=conv_name_base + '2a')(input_tensor)
+    else:
+        x = Conv2D(filters1, kernel_size, strides=strides, name=conv_name_base + '2a')(input_tensor)
+    x = BatchNormalization(axis=bn_axis, name=bn_name_base + '2a')(x)
+    x = Activation('relu')(x)
+
+    x = Conv2D(filters2, kernel_size, padding='same', name=conv_name_base + '2b')(x)
+    x = BatchNormalization(axis=bn_axis, name=bn_name_base + '2b')(x)
+    x = Activation('relu')(x)
+
+    if strides == (1, 1):
+        shortcut = Conv2D(filters2, kernel_size, strides=strides, padding='same', name=conv_name_base + '1')(input_tensor)
+    else:
+        shortcut = Conv2D(filters2, kernel_size, strides=strides, name=conv_name_base + '1')(input_tensor)
+
+    x = layers.add([x, shortcut])
+    x = Activation('relu')(x)
+    return x
+
+
+def ResNet18(include_top=True, weights='imagenet', 
+            base_channel_num = 16, k = 1, input_tensor=None, 
+            input_shape=None, pooling=None, 
+            classes=1, with_dropout=True):
+    input_shape = _obtain_input_shape(input_shape,
+                                      default_size=224,
+                                      min_size=75,
+                                      data_format=K.image_data_format(),
+                                      require_flatten=include_top,
+                                      weights=weights)
+    if input_tensor is None:
+        img_input = Input(shape=input_shape)
+    else:
+        if not K.is_keras_tensor(input_tensor):
+            img_input = Input(tensor=input_tensor, shape=input_shape)
+        else:
+            img_input = input_tensor
+    if K.image_data_format() == 'channels_last':
+        bn_axis = 3
+    else:
+        bn_axis = 1
+
+    x = Conv2D(base_channel_num, (7, 7), strides=(2, 2), padding='same', name='conv1')(img_input)
+    x = Activation('relu')(x)
+    x = MaxPooling2D((3, 3), strides=(2, 2))(x)
+
+    # module1 [3*3 base_channel_num, 3*3 base_channel_num] * 2
+    x = conv_bulding_block34(x, 3, [base_channel_num * k, base_channel_num * k], stage=2, block='a', strides=(1, 1))
+    x = identity_bulding_block34(x, 3, [base_channel_num * k, base_channel_num * k], stage=2, block='b')
+    if with_dropout: x = Dropout(0.2)(x)
+    # module2 [3*3 base_channel_num * 2, 3*3 base_channel_num * 2] * 2
+    x = conv_bulding_block34(x, 3, [base_channel_num * 2 * k, base_channel_num * 2 * k], stage=3, block='a')
+    x = identity_bulding_block34(x, 3, [base_channel_num * 2 * k, base_channel_num * 2 * k], stage=3, block='b')
+    if with_dropout: x = Dropout(0.2)(x)
+    # module3 [3*3 base_channel_num * 4, 3*3 base_channel_num * 4] * 2
+    x = conv_bulding_block34(x, 3, [base_channel_num * 4 * k, base_channel_num * 4 * k], stage=4, block='a')
+    x = identity_bulding_block34(x, 3, [base_channel_num * 4 * k, base_channel_num * 4 * k], stage=4, block='b')
+    if with_dropout: x = Dropout(0.3)(x)
+    # module4 [3*3 base_channel_num * 8, 3*3 base_channel_num * 8] * 2
+    x = conv_bulding_block34(x, 3, [base_channel_num * 8 * k, base_channel_num * 8 * k], stage=5, block='a')
+    x = identity_bulding_block34(x, 3, [base_channel_num * 8 * k, base_channel_num * 8 * k], stage=5, block='b')
+    if with_dropout: x = Dropout(0.3, name="final")(x)
+    # x = AveragePooling2D((3, 3), name='avg_pool')(x)
+
+    if include_top:
+        x = Flatten()(x)
+        x = Dense(classes, activation='softmax', name='fc1000')(x)
+    else:
+        if pooling == 'avg':
+            x = GlobalAveragePooling2D(name = "global_avg_pool")(x)
+        elif pooling == 'max':
+            x = GlobalMaxPooling2D(name = "global_max_pool")(x)
+
+    # Ensure that the model takes into account
+    # any potential predecessors of `input_tensor`.
+    if input_tensor is not None:
+        inputs = get_source_inputs(input_tensor)
+    else:
+        inputs = img_input
+    # Create model.
+    model = Model(inputs, x, name='resnet18')
+
+    return model
 
 def ResNet50(include_top=True, weights='imagenet',
              input_tensor=None, input_shape=None,
