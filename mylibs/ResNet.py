@@ -179,7 +179,7 @@ def conv_bulding_block34(input_tensor, kernel_size, filters, stage, block, strid
     return x
 
 
-def ResNet18(include_top=True, weights='imagenet', 
+def ResNet34(include_top=True, weights='imagenet', 
             base_channel_num = 16, k = 1, input_tensor=None, 
             input_shape=None, pooling=None, 
             classes=1, with_dropout=True):
@@ -206,20 +206,28 @@ def ResNet18(include_top=True, weights='imagenet',
     x = MaxPooling2D((3, 3), strides=(2, 2))(x)
 
     # module1 [3*3 base_channel_num, 3*3 base_channel_num] * 2
-    x = conv_bulding_block34(x, 3, [base_channel_num * k, base_channel_num * k], stage=2, block='a', strides=(1, 1))
-    x = identity_bulding_block34(x, 3, [base_channel_num * k, base_channel_num * k], stage=2, block='b')
+    x = conv_bulding_block34(x, 3, [base_channel_num, base_channel_num], stage=2, block='a', strides=(1, 1))
+    x = identity_bulding_block34(x, 3, [base_channel_num, base_channel_num], stage=2, block='b')
+    x = identity_bulding_block34(x, 3, [base_channel_num, base_channel_num], stage=2, block='b')
     if with_dropout: x = Dropout(0.2)(x)
     # module2 [3*3 base_channel_num * 2, 3*3 base_channel_num * 2] * 2
-    x = conv_bulding_block34(x, 3, [base_channel_num * 2 * k, base_channel_num * 2 * k], stage=3, block='a')
-    x = identity_bulding_block34(x, 3, [base_channel_num * 2 * k, base_channel_num * 2 * k], stage=3, block='b')
+    x = conv_bulding_block34(x, 3, [base_channel_num * k, base_channel_num * k], stage=3, block='a')
+    x = identity_bulding_block34(x, 3, [base_channel_num * k, base_channel_num * k], stage=3, block='b')
+    x = identity_bulding_block34(x, 3, [base_channel_num * k, base_channel_num * k], stage=3, block='b')
+    x = identity_bulding_block34(x, 3, [base_channel_num * k, base_channel_num * k], stage=3, block='b')
     if with_dropout: x = Dropout(0.2)(x)
     # module3 [3*3 base_channel_num * 4, 3*3 base_channel_num * 4] * 2
-    x = conv_bulding_block34(x, 3, [base_channel_num * 4 * k, base_channel_num * 4 * k], stage=4, block='a')
-    x = identity_bulding_block34(x, 3, [base_channel_num * 4 * k, base_channel_num * 4 * k], stage=4, block='b')
+    x = conv_bulding_block34(x, 3, [base_channel_num * 2 * k, base_channel_num * 2 * k], stage=4, block='a')
+    x = identity_bulding_block34(x, 3, [base_channel_num * 2 * k, base_channel_num * 2 * k], stage=4, block='b')
+    x = identity_bulding_block34(x, 3, [base_channel_num * 2 * k, base_channel_num * 2 * k], stage=4, block='b')
+    x = identity_bulding_block34(x, 3, [base_channel_num * 2 * k, base_channel_num * 2 * k], stage=4, block='b')
+    x = identity_bulding_block34(x, 3, [base_channel_num * 2 * k, base_channel_num * 2 * k], stage=4, block='b')
+    x = identity_bulding_block34(x, 3, [base_channel_num * 2 * k, base_channel_num * 2 * k], stage=4, block='b')
     if with_dropout: x = Dropout(0.3)(x)
     # module4 [3*3 base_channel_num * 8, 3*3 base_channel_num * 8] * 2
-    x = conv_bulding_block34(x, 3, [base_channel_num * 8 * k, base_channel_num * 8 * k], stage=5, block='a')
-    x = identity_bulding_block34(x, 3, [base_channel_num * 8 * k, base_channel_num * 8 * k], stage=5, block='b')
+    x = conv_bulding_block34(x, 3, [base_channel_num * 4 * k, base_channel_num * 4 * k], stage=5, block='a')
+    x = identity_bulding_block34(x, 3, [base_channel_num * 4 * k, base_channel_num * 4 * k], stage=5, block='b')
+    x = identity_bulding_block34(x, 3, [base_channel_num * 4 * k, base_channel_num * 4 * k], stage=5, block='b')
     if with_dropout: x = Dropout(0.3, name="final")(x)
     # x = AveragePooling2D((3, 3), name='avg_pool')(x)
 
